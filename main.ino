@@ -29,14 +29,12 @@ int rightEnable = 6;
 int rightForward = 7;
 int rightBackward = 5;
 
-int speed = 0;
-
 // IR remote init
 int pin_recept = 9; // On définit le pin 11
 IRrecv ir_recept(pin_recept);
 decode_results ir_decode; // stockage données reçues
 
-boolean test;
+boolean isRunning;
 
 void setup() {
 
@@ -51,8 +49,7 @@ pinMode(rightBackward, OUTPUT);
 
 disableMotors();
 
-test = true;
-speed = 0;
+isRunning = false;
 
 // Init IR remote pins
 Serial.begin(9600);
@@ -61,6 +58,8 @@ ir_recept.enableIRIn(); // Initialisation de la réception
 
 void loop() {
 
+  delay(DELTA_TIME);
+
   if (ir_recept.decode(&ir_decode))
   {
       int key = ir_decode.value;
@@ -68,11 +67,17 @@ void loop() {
       ir_recept.resume();
       doCommand(key);
   }
-
 }
 
 // interpret IR remote command
 void doCommand(int key) {
+
+if (isRunning) {
+  brake();
+  Serial.println("Coast and return");
+  return;
+}
+
   switch (key) {
     case KEY_OK:
       brake();
@@ -90,27 +95,23 @@ void doCommand(int key) {
       break;
 
     case KEY_TOP:
-      forward(DELTA_TIME);
+      forward();
       Serial.println("Forward");
-      coast();
       break;
 
     case KEY_BOTTOM:
-      backward(DELTA_TIME);
+      backward();
       Serial.println("Backward");
-      coast();
       break;
 
     case KEY_LEFT:
-      turnLeft(DELTA_TIME);
+      turnLeft();
       Serial.println("Turn left");
-      coast();
       break;
 
     case KEY_RIGHT:
-      turnRight(DELTA_TIME);
+      turnRight();
       Serial.println("Turn right");
-      coast();
       break;
   }
 }
@@ -126,39 +127,40 @@ void disableMotors() {
   digitalWrite(rightEnable, LOW);
 }
 
-void forward(int time) {
+void forward() {
   motorLeftForward();
   motorRightForward();
-  delay(time);
+  isRunning = true;
 }
 
 void coast() {
   motorLeftCoast();
   motorRightCoast();
+  isRunning = false;
 }
 
 void brake() {
   motorLeftBrake();
   motorRightBrake();
-  speed = 0;
+  isRunning = false;
 }
 
-void backward(int time) {
+void backward() {
   motorLeftBackward();
   motorRightBackward();
-  delay(time);
+  isRunning = true;
 }
 
-void turnLeft(int time) {
+void turnLeft() {
   motorLeftBackward();
   motorRightForward();
-  delay(time);
+  isRunning = true;
 }
 
-void turnRight(int time) {
+void turnRight() {
   motorRightBackward();
   motorLeftForward();
-  delay(time);
+  isRunning = true;
 }
 
 void motorLeftForward() {
