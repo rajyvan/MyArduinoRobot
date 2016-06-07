@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <IRremote.h>
+#include "Ultrasonic.h"
+#include <Servo.h>
 #include "IRRemoteDefine.h"
 
 /**
@@ -16,8 +18,21 @@
  *
  */
 
-#define DELTA_TIME 200
+#define DELTA_TIME        200
+#define MODE_NONE         0
+#define MODE_IR_COMMAND   1
+#define MODE_ULTRASONIC   2
 
+// Init ultrasonic and servo
+#include "Ultrasonic.h"
+#include <Servo.h>
+Ultrasonic ultrasonic(12,13); // 12->trig, 13->echo
+Servo mServo;
+const int STEP = 5;
+const int SIZE = 37;   // Size of distance array =(180/STEP) +1
+int dist[SIZE];
+int rDelay;
+int mid = 90;
 
 // Left motor pins init (enLeft = enable motor, pinB1 = forward, pinB2 = backward)
 int leftEnable = 3;
@@ -35,6 +50,7 @@ IRrecv ir_recept(pin_recept);
 decode_results ir_decode; // stockage données reçues
 
 boolean isRunning;
+int mode;
 
 void setup() {
 
@@ -54,19 +70,36 @@ isRunning = false;
 // Init IR remote pins
 Serial.begin(9600);
 ir_recept.enableIRIn(); // Initialisation de la réception
+
+// Init ultrasonic and servo
+mServo.attach(5, 570, 2320);   // attaches the servo on pin 5 to the servo object
+rDelay = 5 * STEP;            // assuming 10ms/degree speed
+
 }
 
 void loop() {
 
-  delay(DELTA_TIME);
-
   if (ir_recept.decode(&ir_decode))
   {
-      int key = ir_decode.value;
-      Serial.println(ir_decode.value, HEX); // On affiche le code en hexadecimal
-      ir_recept.resume();
-      doCommand(key);
+    int key = ir_decode.value;
+    Serial.println(ir_decode.value, HEX); // On affiche le code en hexadecimal
+    ir_recept.resume();
+    doCommand(key);
   }
+
+  if (mode == MODE_ULTRASONIC) {
+
+    rangeSweep(mid-90, mid+90, dist);
+    disp(dist);
+    int angle = getAngle(dist);
+    Serial.println(angle);
+
+  } else if (mode == MODE_IR_COMMAND) {
+
+    delay(DELTA_TIME);
+
+  }
+
 }
 
 // interpret IR remote command
@@ -84,12 +117,20 @@ if (isRunning) {
       Serial.println("Break");
       break;
 
+    case KEY_2:
+        mode = MODE_ULTRASONIC;
+        enableMotors();
+        Serial.println("Mode ULTRASONIC selected");
+        break;
+
     case KEY_1:
+      mode = MODE_IR_COMMAND;
       enableMotors();
-      Serial.println("Motors enabled");
+      Serial.println("Mode IR_COMMAND selected");
       break;
 
     case KEY_0:
+      mode = MODE_NONE;
       disableMotors();
       Serial.println("Motors disabled");
       break;
@@ -201,4 +242,51 @@ void motorRightCoast() {
 void motorRightBrake() {
   digitalWrite(rightForward, HIGH);
   digitalWrite(rightBackward, HIGH);
+}
+
+
+/**
+ * Reads distance over 180 degrees twice in left-to-right
+ * sweep, then right-to-left sweep and averages the readings
+ */
+void rangeSweep(int st, int en, int dist[]) {
+  int pos = 0;    // variable to store the servo position
+  for(pos = st; pos<en; pos+=STEP) {
+    mServo.write(pos);              // tell servo to go to position in variable 'pos'
+    delay(rDelay);               // waits 10ms/degree for the servo to reach the position
+    dist[int(pos/STEP)] = ultrasonic.Ranging(CM);
+  }
+
+  for(pos = en; pos>st; pos-=STEP) {
+    mServo.write(pos);              // tell servo to go to position in variable 'pos'
+    delay(rDelay);
+    dist[int(pos/STEP)] += ultrasonic.Ranging(CM);
+    dist[int(pos/STEP)] /= 2;
+  }
+}
+
+/**
+ * Prints the range readings to the serial monitor
+ */
+void  disp(int dist[]) {
+  for(int i = 0; i < SIZE; i++) {
+    Serial.print(i*STEP);
+    Serial.print(", ");
+    Serial.println(dist[i]);
+  }
+}
+
+/**
+ * Get the angle at which the distance is maximum
+ */
+int getAngle(int dist[]) {
+  int maxDist=0;
+  int angle=mid;
+  for(int i = 0; i < SIZE; i++) {
+    if(maxDist<dist[i]) {
+      maxDist = dist[i];
+      angle = i * STEP;
+    }
+  }
+  return angle;
 }
