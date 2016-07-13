@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <IRremote.h>
+#include <SoftwareSerial.h>
 #include "Ultrasonic.h"
 #include <Servo.h>
 #include "IRRemoteDefine.h"
@@ -50,9 +51,15 @@ IRrecv ir_recept(pin_recept);
 decode_results ir_decode; // stockage données reçues
 
 boolean isRunning;
+boolean useUltrasonic;
 int mode;
 
+SoftwareSerial bluetooth(10, 11);
+
 void setup() {
+
+// Set up bluetooth
+bluetooth.begin(9600);
 
 // Set motor pins to output
 pinMode(leftEnable, OUTPUT);
@@ -63,7 +70,7 @@ pinMode(rightEnable, OUTPUT);
 pinMode(rightForward, OUTPUT);
 pinMode(rightBackward, OUTPUT);
 
-disableMotors();
+enableMotors();
 
 isRunning = false;
 
@@ -75,11 +82,47 @@ ir_recept.enableIRIn(); // Initialisation de la réception
 mServo.attach(5, 570, 2320);   // attaches the servo on pin 5 to the servo object
 rDelay = 5 * STEP;            // assuming 10ms/degree speed
 
+useUltrasonic = false;
+
 }
 
 void loop() {
 
-  if (ir_recept.decode(&ir_decode))
+  // Ultrasonic
+  /*if (useUltrasonic) {
+    rangeSweep(mid-90, mid+90, dist);
+    disp(dist);
+    int angle = getAngle(dist);
+    //Serial.println(angle);
+  }*/
+
+if (Serial.available()) {
+  enableMotors();
+  int value = Serial.read();
+  //bluetooth.write(value);
+  Serial.println(value, HEX);
+  useUltrasonic = true;
+
+  if (value == 0x10) {
+    forward();
+  Serial.println("forward");
+  } else if(value == 0x20) {
+    backward();
+    Serial.println("backward");
+  } else if (value == 0x30) {
+    turnLeft();
+    Serial.println("turnLeft");
+  } else if (value == 0x40) {
+    turnRight();
+    Serial.println("turnRight");
+  } else if (value == 0xAA){
+    disableMotors();
+    Serial.println("brake");
+    useUltrasonic = false;
+  }
+}
+
+  /*if (ir_recept.decode(&ir_decode))
   {
     int key = ir_decode.value;
     Serial.println(ir_decode.value, HEX); // On affiche le code en hexadecimal
@@ -98,7 +141,7 @@ void loop() {
 
     delay(DELTA_TIME);
 
-  }
+  }*/
 
 }
 
